@@ -1,0 +1,500 @@
+{
+  "name": "AI Social Media Automation - Shankar Group",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "social-automation",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "Webhook - Topic Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        300
+      ],
+      "webhookId": "social-automation-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json.body || $input.first().json;\n\nif (!input.topic || input.topic.trim() === '') {\n  throw new Error('Topic is required. Please provide a topic in the request body.');\n}\n\nreturn [{\n  json: {\n    topic: input.topic.trim(),\n    brief: input.brief || input.topic.trim(),\n    brand_voice: input.brand_voice || 'professional and engaging',\n    target_audience: input.target_audience || 'general audience',\n    timestamp: new Date().toISOString(),\n    request_id: 'REQ_' + Date.now()\n  }\n}];"
+      },
+      "id": "validate-input",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_GROQ_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"You are a social media content creator.\\n\\nGenerate content for:\\nTOPIC: {{ $json.topic }}\\nBRIEF: {{ $json.brief }}\\nBRAND VOICE: {{ $json.brand_voice }}\\nTARGET AUDIENCE: {{ $json.target_audience }}\\n\\nReturn ONLY valid JSON, no markdown, no explanation:\\n{\\n  \\\"caption_base\\\": \\\"engaging caption 100-150 words\\\",\\n  \\\"hashtags\\\": [\\\"#tag1\\\",\\\"#tag2\\\",\\\"#tag3\\\",\\\"#tag4\\\",\\\"#tag5\\\"],\\n  \\\"cta\\\": \\\"strong call to action sentence\\\",\\n  \\\"image_prompt\\\": \\\"detailed visual description for image generation 50-80 words\\\",\\n  \\\"video_prompt\\\": \\\"short video concept 2-3 sentences\\\"\\n}\"\n    }\n  ],\n  \"temperature\": 0.8,\n  \"max_tokens\": 1024\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "groq-generate",
+      "name": "Gemini - Generate Content",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        680,
+        300
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst original = $('Validate Input').first().json;\n\nif (response.error) {\n  throw new Error(typeof response.error === 'string' ? response.error : response.error.message || 'API Error');\n}\n\nlet text = '';\ntry {\n  text = response.choices[0].message.content || '';\n} catch (e) {\n  throw new Error('Invalid API response structure');\n}\n\ntext = text.replace(/```json\\n?/g, '').replace(/```\\n?/g, '').trim();\n\nlet parsed;\ntry {\n  const jsonMatch = text.match(/\\{[\\s\\S]*\\}/);\n  parsed = JSON.parse(jsonMatch ? jsonMatch[0] : text);\n} catch {\n  parsed = {\n    caption_base: text.substring(0, 400),\n    hashtags: ['#AI', '#Automation', '#Business', '#India', '#Tech'],\n    cta: 'Contact us today to learn more!',\n    image_prompt: 'Professional business automation concept India modern office',\n    video_prompt: 'Short video showing AI transforming a small business'\n  };\n}\n\nconst hashtags = Array.isArray(parsed.hashtags) ? parsed.hashtags : ['#AI', '#Automation', '#Business'];\n\nreturn [{\n  json: {\n    ...original,\n    caption_base: typeof parsed.caption_base === 'string' ? parsed.caption_base : text.substring(0, 400),\n    hashtags: hashtags,\n    hashtags_string: hashtags.join(' '),\n    cta: typeof parsed.cta === 'string' ? parsed.cta : 'Learn more today!',\n    image_prompt: typeof parsed.image_prompt === 'string' ? parsed.image_prompt : 'Professional business concept',\n    video_prompt: typeof parsed.video_prompt === 'string' ? parsed.video_prompt : ''\n  }\n}];"
+      },
+      "id": "parse-output",
+      "name": "Parse Gemini Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "=https://image.pollinations.ai/prompt/{{ encodeURIComponent($json.image_prompt) }}",
+        "options": {
+          "timeout": 30000,
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "pollinations-image",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1120,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return [{\n  json: {\n    ...$('Parse Gemini Output').first().json,\n    image_url: `https://image.pollinations.ai/prompt/${encodeURIComponent($('Parse Gemini Output').first().json.image_prompt)}`,\n  }\n}];"
+      },
+      "id": "extract-image",
+      "name": "Code in JavaScript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1340,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json;\nconst caption = typeof data.caption_base === 'string' ? data.caption_base : '';\nconst hashtags = Array.isArray(data.hashtags) ? data.hashtags : [];\nconst cta = typeof data.cta === 'string' ? data.cta : 'Learn more today!';\nconst hashtagsStr = hashtags.join(' ');\n\n// Instagram - emoji heavy, all hashtags\nconst instagramCaption = `${caption}\\n\\n\u2728 ${cta}\\n\\n${hashtagsStr}`;\n\n// LinkedIn - professional, 5 hashtags max\nconst linkedinHashtags = hashtags.slice(0, 5).join(' ');\nconst linkedinCaption = `${caption}\\n\\n${cta}\\n\\n${linkedinHashtags}`;\n\n// Facebook - conversational, 7 hashtags\nconst fbHashtags = hashtags.slice(0, 7).join(' ');\nconst facebookCaption = `${caption}\\n\\n${cta}\\n\\n${fbHashtags}`;\n\n// YouTube\nconst youtubeTitle = data.topic && data.topic.length > 100 ? data.topic.substring(0, 97) + '...' : (data.topic || 'AI Social Media');\nconst youtubeDescription = `${caption}\\n\\n${cta}\\n\\n${hashtagsStr}`;\n\nreturn [{\n  json: {\n    ...data,\n    instagram_caption: instagramCaption,\n    linkedin_caption: linkedinCaption,\n    facebook_caption: facebookCaption,\n    youtube_title: youtubeTitle,\n    youtube_description: youtubeDescription\n  }\n}];"
+      },
+      "id": "platform-versions",
+      "name": "Platform-Specific Versions",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/post-instagram-v3",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"caption\": $json.instagram_caption.substring(0, 400).replace(/\\n/g, ' '), \"image_url\": \"https://picsum.photos/1080/1080.jpg\" }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "instagram-post",
+      "name": "Instagram - Post via OpenCLI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        200
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://127.0.0.1:8000/post-tweet-v3",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ \"caption\": $json.instagram_caption.substring(0, 280).replace(/\\n/g, ' ') }) }}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "id": "twitter-post",
+      "name": "Twitter - Post Tweet",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1780,
+        420
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const platformData = $('Platform-Specific Versions').first().json;\n\n// INSTAGRAM\nlet instagramStatus = 'SUCCESS';\nlet instagramPostId = '';\nlet instagramError = '';\ntry {\n  const ig = $('Instagram - Post via OpenCLI').first().json;\n  if (ig.output && ig.output.includes('Posted')) {\n    instagramStatus = 'SUCCESS';\n    instagramPostId = 'IG_POSTED';\n  } else if (ig.error && ig.error.trim() !== '') {\n    instagramStatus = 'FAILED';\n    instagramError = ig.error;\n  }\n} catch (e) {\n  instagramStatus = 'FAILED';\n  instagramError = e.message;\n}\n\n// TWITTER\nlet twitterStatus = 'SUCCESS';\nlet twitterPostId = '';\nlet twitterError = '';\ntry {\n  const tw = $('Twitter - Post Tweet').first().json;\n  if (tw.output && tw.output.includes('posted successfully')) {\n    twitterStatus = 'SUCCESS';\n    twitterPostId = 'TW_POSTED';\n  } else if (tw.error && tw.error.trim() !== '') {\n    twitterStatus = 'FAILED';\n    twitterError = tw.error;\n  }\n} catch (e) {\n  twitterStatus = 'FAILED';\n  twitterError = e.message;\n}\n\nreturn [{\n  json: {\n    request_id: platformData.request_id,\n    timestamp: platformData.timestamp,\n    topic: platformData.topic,\n    caption_base: platformData.caption_base,\n    hashtags: platformData.hashtags_string,\n    cta: platformData.cta,\n    image_prompt: platformData.image_prompt,\n    image_url: platformData.image_url,\n    instagram_caption: platformData.instagram_caption,\n    linkedin_caption: platformData.linkedin_caption,\n    facebook_caption: platformData.facebook_caption,\n    youtube_title: platformData.youtube_title,\n    youtube_description: platformData.youtube_description,\n    instagram_status: instagramStatus,\n    instagram_post_id: instagramPostId,\n    instagram_error: instagramError,\n    twitter_status: twitterStatus,\n    twitter_post_id: twitterPostId,\n    twitter_error: twitterError,\n    overall_status: instagramStatus === 'SUCCESS' && twitterStatus === 'SUCCESS' ? 'ALL_SUCCESS' : instagramStatus === 'FAILED' && twitterStatus === 'FAILED' ? 'ALL_FAILED' : 'PARTIAL_SUCCESS'\n  }\n}];"
+      },
+      "id": "merge-results",
+      "name": "Merge & Prepare Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "19t2_Yce8JLjpmf5OFQ_gnXfuIxZL97lfq0eb8wQrWSI",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Sheet1",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Request ID": "={{ $json.request_id }}",
+            "Timestamp": "={{ $json.timestamp }}",
+            "Topic": "={{ $json.topic }}",
+            "Caption Base": "={{ $json.caption_base }}",
+            "Hashtags": "={{ $json.hashtags }}",
+            "CTA": "={{ $json.cta }}",
+            "Image Prompt": "={{ $json.image_prompt }}",
+            "Image URL": "={{ $json.image_url }}",
+            "Instagram Caption": "={{ $json.instagram_caption }}",
+            "LinkedIn Caption": "={{ $json.linkedin_caption }}",
+            "Facebook Caption": "={{ $json.facebook_caption }}",
+            "YouTube Title": "={{ $json.youtube_title }}",
+            "YouTube Description": "={{ $json.youtube_description }}",
+            "Instagram Status": "={{ $json.instagram_status }}",
+            "Instagram Post ID": "YOUR_INSTAGRAM_ACCOUNT_ID",
+            "Instagram Error": "={{ $json.instagram_error }}",
+            "Twitter Status": "={{ $json.twitter_status }}",
+            "Twitter Post ID": "={{ $json.twitter_post_id }}",
+            "Twitter Error": "={{ $json.twitter_error }}",
+            "Overall Status": "={{ $json.overall_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-sheets",
+      "name": "Log to Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, request_id: $json['Request ID'] || $('Merge & Prepare Log').first().json.request_id, status: $('Merge & Prepare Log').first().json.overall_status, topic: $('Merge & Prepare Log').first().json.topic, image_url: $('Merge & Prepare Log').first().json.image_url, instagram: { status: $('Merge & Prepare Log').first().json.instagram_status, post_id: $('Merge & Prepare Log').first().json.instagram_post_id }, twitter: { status: $('Merge & Prepare Log').first().json.twitter_status, post_id: $('Merge & Prepare Log').first().json.twitter_post_id }, message: 'Workflow executed successfully' }, null, 2) }}",
+        "options": {}
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        2440,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const error = $input.first().json;\nconst originalInput = $('Validate Input').first()?.json || {};\n\nreturn [{\n  json: {\n    request_id: originalInput.request_id || 'ERR_' + Date.now(),\n    timestamp: new Date().toISOString(),\n    topic: originalInput.topic || 'Unknown',\n    error_message: error.message || JSON.stringify(error),\n    failed_node: error.node?.name || 'Unknown',\n    overall_status: 'WORKFLOW_ERROR'\n  }\n}];"
+      },
+      "id": "error-handler",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "19t2_Yce8JLjpmf5OFQ_gnXfuIxZL97lfq0eb8wQrWSI",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Errors",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Request ID": "={{ $json.request_id }}",
+            "Timestamp": "={{ $json.timestamp }}",
+            "Topic": "={{ $json.topic }}",
+            "Error Message": "={{ $json.error_message }}",
+            "Failed Node": "={{ $json.failed_node }}",
+            "Status": "={{ $json.overall_status }}"
+          }
+        },
+        "options": {}
+      },
+      "id": "log-errors",
+      "name": "Log Errors to Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1120,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseCode": 500,
+        "responseBody": "={{ JSON.stringify({ success: false, request_id: $json.request_id, error: $json.error_message, failed_node: $json.failed_node, message: 'Workflow execution failed' }, null, 2) }}",
+        "options": {}
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        1340,
+        520
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook - Topic Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Gemini - Generate Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini - Generate Content": {
+      "main": [
+        [
+          {
+            "node": "Parse Gemini Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Gemini Output": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Platform-Specific Versions",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Platform-Specific Versions": {
+      "main": [
+        [
+          {
+            "node": "Instagram - Post via OpenCLI",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Twitter - Post Tweet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Instagram - Post via OpenCLI": {
+      "main": [
+        [
+          {
+            "node": "Merge & Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge & Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Twitter - Post Tweet": {
+      "main": [
+        [
+          {
+            "node": "Merge & Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge & Prepare Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge & Prepare Log": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Log Errors to Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log Errors to Sheets": {
+      "main": [
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "tags": [
+    {
+      "name": "AI Automation"
+    },
+    {
+      "name": "Social Media"
+    },
+    {
+      "name": "Shankar Group Assignment"
+    }
+  ]
+}
