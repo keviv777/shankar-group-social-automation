@@ -67,6 +67,14 @@ Triggered by a single webhook — one JSON payload generates and publishes a com
 
 ---
 
+## 🎥 Demo Video
+
+▶️ [Watch Full Workflow Demo — Live Execution Recording](https://drive.google.com/file/d/1vFHU3NjwEp4lxD4pWjDL1f-onh0Jh9L_/view?usp=sharing)
+
+> Demo video shows the complete n8n workflow running live — 
+> webhook trigger, Gemini AI caption generation, image creation, 
+> and auto-posting to Instagram & LinkedIn in real time.
+
 ## 📸 Live Demo
 
 ### n8n Workflow — Successful Execution (ID#692, 1m 7.272s)
